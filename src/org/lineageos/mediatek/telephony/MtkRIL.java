@@ -5,6 +5,8 @@ import android.net.LinkProperties;
 import android.os.Handler;
 import android.os.HwBinder;
 import android.os.Message;
+import android.os.Registrant;
+import android.os.RegistrantList;
 import android.os.RemoteException;
 import android.os.WorkSource;
 import android.telephony.Rlog;
@@ -20,8 +22,11 @@ import com.android.internal.telephony.RILRequest;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
 import java.util.NoSuchElementException;
 import java.util.concurrent.atomic.AtomicLong;
+
+import vendor.mediatek.hardware.radio.V3_0.*;
 
 public class MtkRIL extends RIL {
     private static final String LOG_TAG = "MtkRIL";
@@ -211,6 +216,83 @@ public class MtkRIL extends RIL {
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    protected RegistrantList mDedicatedBearerActivedRegistrants = new RegistrantList();
+    public void registerForDedicatedBearerActivated(Handler h, int what, Object obj) {
+        mDedicatedBearerActivedRegistrants.add(new Registrant(h, what, obj));
+    }
+
+    public void unregisterForDedicatedBearerActivated(Handler h) {
+        mDedicatedBearerActivedRegistrants.remove(h);
+    }
+
+    protected RegistrantList mDedicatedBearerModifiedRegistrants = new RegistrantList();
+    public void registerForDedicatedBearerModified(Handler h, int what, Object obj) {
+        mDedicatedBearerModifiedRegistrants.add(new Registrant(h, what, obj));
+    }
+
+    public void unregisterForDedicatedBearerModified(Handler h) {
+        mDedicatedBearerModifiedRegistrants.remove(h);
+    }
+
+    protected RegistrantList mDedicatedBearerDeactivatedRegistrants = new RegistrantList();
+    public void registerForDedicatedBearerDeactivationed(Handler h, int what, Object obj) {
+        mDedicatedBearerDeactivatedRegistrants.add(new Registrant(h, what, obj));
+    }
+
+    public void unregisterForDedicatedBearerDeactivationed(Handler h) {
+        mDedicatedBearerDeactivatedRegistrants.remove(h);
+    }
+
+    public MtkDedicateDataCallResponse convertDedicatedDataCallResult(DedicateDataCall ddcResult) {
+        int ddcId = ddcResult.ddcId;
+        int interfaceId = ddcResult.interfaceId;
+        int primaryCid = ddcResult.primaryCid;
+        int cid = ddcResult.cid;
+        int active = ddcResult.active;
+        int signalingFlag = ddcResult.signalingFlag;
+        int bearerId = ddcResult.bearerId;
+        int failCause = ddcResult.failCause;
+
+        MtkQosStatus mtkQosStatus = null;
+        riljLogMtk("ddcResult.hasQos: " + ddcResult.hasQos);
+        if (ddcResult.hasQos != 0) {
+            int qci = ddcResult.qos.qci;
+            int dlGbr = ddcResult.qos.dlGbr;
+            int ulGbr = ddcResult.qos.ulGbr;
+            int dlMbr = ddcResult.qos.dlMbr;
+            int ulMbr = ddcResult.qos.ulMbr;
+            mtkQosStatus = new MtkQosStatus(qci, dlGbr, ulGbr, dlMbr, ulMbr);
+        }
+
+        MtkTftStatus mtkTftStatus = null;
+        riljLogMtk("ddcResult.hasTft: " + ddcResult.hasTft);
+        if (ddcResult.hasTft != 0) {
+            int operation = ddcResult.tft.operation;
+            ArrayList<MtkPacketFilterInfo> mtkPacketFilterInfo
+                    = new ArrayList<MtkPacketFilterInfo>();
+            for(PktFilter info : ddcResult.tft.pfList){
+                MtkPacketFilterInfo pfInfo
+                        = new MtkPacketFilterInfo(info.id, info.precedence, info.direction,
+                                                  info.networkPfIdentifier, info.bitmap,
+                                                  info.address, info.mask,
+                                                  info.protocolNextHeader, info.localPortLow,
+                                                  info.localPortHigh, info.remotePortLow,
+                                                  info.remotePortHigh, info.spi, info.tos,
+                                                  info.tosMask, info.flowLabel);
+                mtkPacketFilterInfo.add(pfInfo);
+            }
+
+            ArrayList<Integer> pfList = (ArrayList<Integer>)ddcResult.tft.tftParameter.linkedPfList;
+            MtkTftParameter mtkTftParameter = new MtkTftParameter(pfList);
+            mtkTftStatus = new MtkTftStatus(operation, mtkPacketFilterInfo, mtkTftParameter);
+        }
+
+        String pcscfAddress = ddcResult.pcscf;
+        return new MtkDedicateDataCallResponse(interfaceId, primaryCid, cid, active,
+                                               signalingFlag, bearerId, failCause,
+                                               mtkQosStatus, mtkTftStatus, pcscfAddress);
     }
 
     final class MtkRadioProxyDeathRecipient implements HwBinder.DeathRecipient {

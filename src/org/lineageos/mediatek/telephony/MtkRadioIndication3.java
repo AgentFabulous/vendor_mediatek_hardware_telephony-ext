@@ -1,6 +1,7 @@
 package org.lineageos.mediatek.telephony;
 
 import android.hardware.radio.V1_0.SetupDataCallResult;
+import android.os.AsyncResult;
 
 import com.android.internal.telephony.RadioIndication;
 import com.android.internal.telephony.RIL;
@@ -408,15 +409,33 @@ public class MtkRadioIndication3 extends IRadioIndication.Stub {
     }
 
     public void dedicatedBearerActivationInd(int type, DedicateDataCall ddcData) {
-        mRil.riljLogMtk("[MTK]< dedicatedBearerActivationInd not implemented");
+        mRil.riljLogMtk("[MTK]< dedicatedBearerActivationInd");
+        mRil.processIndicationMtk(type);
+        MtkDedicateDataCallResponse ret = mRil.convertDedicatedDataCallResult(ddcData);
+
+        if (mRil.mDedicatedBearerActivedRegistrants != null) {
+            mRil.mDedicatedBearerActivedRegistrants.notifyRegistrants(
+                    new AsyncResult(null, ret, null));
+        }
     }
 
     public void dedicatedBearerModificationInd(int type, DedicateDataCall ddcData) {
-        mRil.riljLogMtk("[MTK]< dedicatedBearerModificationInd not implemented");
+        mRil.riljLogMtk("[MTK]< dedicatedBearerModificationInd");
+        mRil.processIndicationMtk(type);
+        MtkDedicateDataCallResponse ret = mRil.convertDedicatedDataCallResult(ddcData);
+        if (mRil.mDedicatedBearerModifiedRegistrants != null) {
+            mRil.mDedicatedBearerModifiedRegistrants.notifyRegistrants(
+                    new AsyncResult(null, ret, null));
+        }
     }
 
     public void dedicatedBearerDeactivationInd(int type, int cid) {
-        mRil.riljLogMtk("[MTK]< dedicatedBearerDeactivationInd not implemented");
+        mRil.riljLogMtk("[MTK]< dedicatedBearerDeactivationInd");
+        mRil.processIndicationMtk(type);
+        if (mRil.mDedicatedBearerDeactivatedRegistrants != null) {
+            mRil.mDedicatedBearerDeactivatedRegistrants.notifyRegistrants(
+                    new AsyncResult(null, cid, null));
+        }
     }
 
     public void bipProactiveCommand(int type, String cmd) {
